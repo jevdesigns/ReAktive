@@ -151,9 +151,52 @@ const server = http.createServer((req, res) => {
   });
 });
 
-// WebSocket upgrade handler for hot reload
+// WebSocket upgrade handler for hot reload and HA proxy
 server.on('upgrade', (request, socket, head) => {
-  if (request.url === '/ws/reload') {
+  if (request.url === '/api/ha/websocket') {
+    // Proxy WebSocket connection to Home Assistant
+    const haWsUrl = `ws://${HA_HOST}:${HA_PORT}/api/websocket`;
+    console.log(`[HA WS PROXY] Connecting to ${haWsUrl}`);
+    
+    const haWs = new WebSocket(haWsUrl);
+    
+    haWs.on('open', () => {
+      console.log('[HA WS PROXY] Connected to Home Assistant WebSocket');
+    });
+    
+    haWs.on('message', (data) => {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.write(data);
+      }
+    });
+    
+    haWs.on('close', (code, reason) => {
+      console.log(`[HA WS PROXY] Home Assistant connection closed: ${code} ${reason}`);
+      socket.end();
+    });
+    
+    haWs.on('error', (error) => {
+      console.error('[HA WS PROXY] Home Assistant WebSocket error:', error);
+      socket.end();
+    });
+    
+    socket.on('data', (data) => {
+      if (haWs.readyState === WebSocket.OPEN) {
+        haWs.send(data);
+      }
+    });
+    
+    socket.on('close', () => {
+      console.log('[HA WS PROXY] Client connection closed');
+      haWs.close();
+    });
+    
+    socket.on('error', (error) => {
+      console.error('[HA WS PROXY] Client WebSocket error:', error);
+      haWs.close();
+    });
+    
+  } else if (request.url === '/ws/reload') {
     wss.handleUpgrade(request, socket, head, (ws) => {
       connectedClients.add(ws);
       console.log('Client connected for hot reload');

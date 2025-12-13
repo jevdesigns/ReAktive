@@ -5,6 +5,7 @@ import LightsPage from './pages/LightsPage';
 import ClimatePage from './pages/ClimatePage';
 import SecurityPage from './pages/SecurityPage';
 import SettingsPage from './pages/SettingsPage';
+import ErrorBoundary from './components/ErrorBoundary';
 import './index.css';
 import haService from './services/haService';
 
@@ -26,23 +27,13 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [time, setTime] = useState(new Date());
   
-  // State for lights — initialized from Home Assistant entity ids provided via ingress
-  const [lights, setLights] = useState([
-    { id: 'light.basement_sitting_area_main_lights_1', title: 'Basement Sitting Area Main Lights 1', on: false, brightness: 0 },
-    { id: 'light.basement_sitting_area_main_lights_2', title: 'Basement Sitting Area Main Lights 2', on: false, brightness: 0 },
-    { id: 'light.den_den_lights', title: ' Den Den Lights', on: false, brightness: 0 },
-    { id: 'light.den_recessed_lights', title: 'Den Recessed Lights', on: false, brightness: 0 },
-    { id: 'light.exterior_deck_lights_right', title: 'Exterior Deck Lights Right', on: false, brightness: 0 },
-    { id: 'light.front_foyer_hallway_lights', title: 'Front Foyer Hallway Lights', on: false, brightness: 0 },
-    { id: 'light.front_foyer_stairway_lights', title: 'Front Foyer Stairway Lights', on: false, brightness: 0 },
-    { id: 'light.kitchen_recessed_main_lights', title: 'Kitchen Recessed Main Lights', on: false, brightness: 0 },
-    { id: 'light.living_room_main_lights', title: 'Living Room Main Lights', on: false, brightness: 0 },
-    { id: 'light.master_bathroom_tub_lights', title: 'Master Bathroom Tub Lights', on: false, brightness: 0 },
-    { id: 'light.master_bathroom_vanity_lights', title: 'Master Bathroom Vanity Lights', on: false, brightness: 0 },
-    { id: 'light.office_main_lights', title: 'Office Main Lights', on: false, brightness: 0 },
-    { id: 'switch.mudroom_main_lights', title: 'Mudroom Main Lights', on: false, brightness: 0, isSwitch: true },
-    { id: 'switch.myas_bedroom_recessed_lights', title: "Mya’s Bedroom Recessed Lights", on: false, brightness: 0, isSwitch: true },
-  ]);
+  // Dynamic entity state - discovered from Home Assistant
+  const [lights, setLights] = useState([]);
+  const [climateDevices, setClimateDevices] = useState([]);
+  const [securityDevices, setSecurityDevices] = useState([]);
+  const [sensors, setSensors] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [wsConnected, setWsConnected] = useState(false);
 
   // State for climate
   const [climate, setClimate] = useState({
@@ -89,18 +80,26 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
-  // Populate lights from Home Assistant and keep them updated (simple polling)
+  // Initialize WebSocket connection and discover entities
   useEffect(() => {
     let mounted = true;
 
-    const fetchLights = async () => {
+    const initializeApp = async () => {
       try {
-        const remote = await haService.getLights();
-        if (!mounted || !remote) return;
+        setLoading(true);
+        
+        // Connect to WebSocket for real-time updates
+        await haService.connectWebSocket();
+        setWsConnected(true);
+        console.log('WebSocket connected for real-time updates');
 
-        // Map HA response to local light shape
-        const mapped = remote.map(item => {
-          const id = item.entity_id || item.entityId || item.id;
+        // Discover all entities from Home Assistant
+        const entities = await haService.getAllEntities();
+        if (!mounted) return;
+
+        // Map lights and switches
+        const mappedLights = [...entities.lights, ...entities.switches].map(item => {
+          const id = item.entity_id;
           const attrs = item.attributes || {};
           const rawBrightness = attrs.brightness ?? null;
           const brightness = rawBrightness != null ? Math.round((rawBrightness / 255) * 100) : 0;
@@ -109,50 +108,198 @@ export default function App() {
             title: attrs.friendly_name || id,
             on: item.state === 'on',
             brightness,
+            isSwitch: item.entity_id.startsWith('switch.'),
           };
         });
 
-        setLights(prev => {
-          // Preserve existing order where possible, update states for known ids
-          const byId = Object.fromEntries(mapped.map(m => [m.id, m]));
-          const merged = prev.map(p => (byId[p.id] ? byId[p.id] : p));
-          // Append any new lights not already in prev
-          mapped.forEach(m => { if (!merged.find(x => x.id === m.id)) merged.push(m); });
-          return merged;
+        // Map climate devices
+        const mappedClimate = entities.climate.map(item => {
+          const attrs = item.attributes || {};
+          return {
+            id: item.entity_id,
+            title: attrs.friendly_name || item.entity_id,
+            temperature: attrs.current_temperature || 72,
+            targetTemp: attrs.temperature || 72,
+            humidity: attrs.current_humidity || 45,
+            mode: attrs.hvac_mode || 'heat',
+            state: item.state,
+          };
         });
-      } catch (err) {
-        console.error('Error fetching lights from HA:', err);
+
+        // Map security devices
+        const mappedSecurity = entities.security.map(item => {
+          const attrs = item.attributes || {};
+          return {
+            id: item.entity_id,
+            title: attrs.friendly_name || item.entity_id,
+            armed: item.state === 'armed_home' || item.state === 'armed_away',
+            mode: item.state,
+          };
+        });
+
+        // Map sensors
+        const mappedSensors = entities.sensors.map(item => {
+          const attrs = item.attributes || {};
+          return {
+            id: item.entity_id,
+            title: attrs.friendly_name || item.entity_id,
+            state: item.state,
+            unit: attrs.unit_of_measurement || '',
+            device_class: attrs.device_class,
+          };
+        });
+
+        setLights(mappedLights);
+        setClimateDevices(mappedClimate);
+        setSecurityDevices(mappedSecurity);
+        setSensors(mappedSensors);
+
+        // Subscribe to real-time updates for all entities
+        mappedLights.forEach(light => {
+          haService.subscribeToEntity(light.id, (newState) => {
+            if (!mounted) return;
+            setLights(prev => prev.map(l => 
+              l.id === light.id ? {
+                ...l,
+                on: newState === 'on',
+                brightness: newState.attributes?.brightness ? 
+                  Math.round((newState.attributes.brightness / 255) * 100) : l.brightness
+              } : l
+            ));
+          });
+        });
+
+        mappedClimate.forEach(device => {
+          haService.subscribeToEntity(device.id, (newState) => {
+            if (!mounted) return;
+            setClimateDevices(prev => prev.map(d => 
+              d.id === device.id ? {
+                ...d,
+                temperature: newState.attributes?.current_temperature || d.temperature,
+                targetTemp: newState.attributes?.temperature || d.targetTemp,
+                mode: newState.attributes?.hvac_mode || d.mode,
+                state: newState
+              } : d
+            ));
+          });
+        });
+
+        setLoading(false);
+      } catch (error) {
+        console.error('Error initializing app:', error);
+        setLoading(false);
+        // Fallback to polling if WebSocket fails
+        setupPolling();
       }
     };
 
-    fetchLights();
-    const interval = setInterval(fetchLights, 5000);
-    return () => { mounted = false; clearInterval(interval); };
+    const setupPolling = () => {
+      console.log('Falling back to polling mode');
+      const fetchLights = async () => {
+        try {
+          const remote = await haService.getLights();
+          if (!mounted || !remote) return;
+
+          const mapped = remote.map(item => {
+            const id = item.entity_id || item.entityId || item.id;
+            const attrs = item.attributes || {};
+            const rawBrightness = attrs.brightness ?? null;
+            const brightness = rawBrightness != null ? Math.round((rawBrightness / 255) * 100) : 0;
+            return {
+              id,
+              title: attrs.friendly_name || id,
+              on: item.state === 'on',
+              brightness,
+            };
+          });
+
+          setLights(prev => {
+            const byId = Object.fromEntries(mapped.map(m => [m.id, m]));
+            const merged = prev.map(p => (byId[p.id] ? byId[p.id] : p));
+            mapped.forEach(m => { if (!merged.find(x => x.id === m.id)) merged.push(m); });
+            return merged;
+          });
+        } catch (err) {
+          console.error('Error fetching lights from HA:', err);
+        }
+      };
+
+      fetchLights();
+      const interval = setInterval(fetchLights, 5000);
+      return () => { mounted = false; clearInterval(interval); };
+    };
+
+    initializeApp();
+
+    return () => {
+      mounted = false;
+      haService.disconnectWebSocket();
+    };
   }, []);
 
   // Light handlers
-  const toggleLight = (id) => {
-    setLights(prev => prev.map(l => 
-      l.id === id ? { ...l, on: !l.on } : l
-    ));
+  const toggleLight = async (id) => {
+    const light = lights.find(l => l.id === id);
+    if (!light) return;
+
+    try {
+      if (light.on) {
+        await haService.turnOffLight(id);
+      } else {
+        await haService.turnOnLight(id, light.brightness);
+      }
+      // WebSocket will update the state automatically
+    } catch (error) {
+      console.error('Error toggling light:', error);
+      // Fallback: update local state optimistically
+      setLights(prev => prev.map(l => 
+        l.id === id ? { ...l, on: !l.on } : l
+      ));
+    }
   };
 
-  const setBrightness = (id, brightness) => {
-    setLights(prev => prev.map(l => 
-      l.id === id ? { ...l, brightness, on: brightness > 0 } : l
-    ));
+  const setBrightness = async (id, brightness) => {
+    try {
+      await haService.turnOnLight(id, brightness);
+      // WebSocket will update the state automatically
+    } catch (error) {
+      console.error('Error setting brightness:', error);
+      // Fallback: update local state optimistically
+      setLights(prev => prev.map(l => 
+        l.id === id ? { ...l, brightness, on: brightness > 0 } : l
+      ));
+    }
   };
 
   // Climate handlers
-  const adjustTemperature = (delta) => {
-    setClimate(prev => ({
-      ...prev,
-      targetTemp: Math.max(60, Math.min(85, prev.targetTemp + delta))
-    }));
+  const adjustTemperature = async (deviceId, delta) => {
+    const device = climateDevices.find(d => d.id === deviceId);
+    if (!device) return;
+
+    const newTemp = Math.max(60, Math.min(85, device.targetTemp + delta));
+    try {
+      await haService.setTemperature(deviceId, newTemp);
+      // WebSocket will update the state automatically
+    } catch (error) {
+      console.error('Error adjusting temperature:', error);
+      // Fallback: update local state optimistically
+      setClimateDevices(prev => prev.map(d => 
+        d.id === deviceId ? { ...d, targetTemp: newTemp } : d
+      ));
+    }
   };
 
-  const setClimateMode = (mode) => {
-    setClimate(prev => ({ ...prev, mode }));
+  const setClimateMode = async (deviceId, mode) => {
+    try {
+      // This would need a proper HA service method for setting HVAC mode
+      console.log(`Setting climate mode for ${deviceId} to ${mode}`);
+      // For now, just update local state
+      setClimateDevices(prev => prev.map(d => 
+        d.id === deviceId ? { ...d, mode } : d
+      ));
+    } catch (error) {
+      console.error('Error setting climate mode:', error);
+    }
   };
 
   // Security handlers
@@ -177,12 +324,15 @@ export default function App() {
     lights,
     toggleLight,
     setBrightness,
-    climate,
+    climate: climateDevices.length > 0 ? climateDevices[0] : climate, // Fallback to old climate for compatibility
+    climateDevices,
     adjustTemperature,
     setClimateMode,
     security,
     toggleSecurityArmed,
     lockDoor,
+    loading,
+    wsConnected,
   };
 
   return (
