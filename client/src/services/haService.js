@@ -32,16 +32,16 @@ class HAWebSocket {
     }
 
     try {
-      // Use the same proxy path for WebSocket
+      // Connect through NGINX proxy
       const wsUrl = `ws://${window.location.host}/api/ha/websocket`;
       this.ws = new WebSocket(wsUrl);
 
       return new Promise((resolve, reject) => {
         this.ws.onopen = () => {
-          console.log('[HA WS] Connected to Home Assistant');
+          console.log('[HA WS] Connected to Home Assistant via NGINX');
           this.connected = true;
           this.reconnectAttempts = 0;
-          
+
           // Authenticate with HA
           this.authenticate().then(resolve).catch(reject);
         };
@@ -118,9 +118,9 @@ class HAWebSocket {
   }
 
   getToken() {
-    // Get token from environment or fallback
-    return process.env.HA_TOKEN || process.env.SUPERVISOR_TOKEN || 
-           'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJkMjUyNDM0ZTdiY2U0ZDgyYTA0NmY5NjFiM2UxYWFhYSIsImlhdCI6MTc2NDY0MTU1MiwiZXhwIjoyMDgwMDAxNTUyfQ.WZjDet0_7fEXHqCMmHVAmmhELVR5p-K_LeZPJ73EQlU';
+    // NGINX proxy handles authentication, but WebSocket still needs token for HA protocol
+    // In production, this will be handled by the proxy
+    return process.env.HA_TOKEN || process.env.SUPERVISOR_TOKEN || '';
   }
 
   subscribeToEvents() {
