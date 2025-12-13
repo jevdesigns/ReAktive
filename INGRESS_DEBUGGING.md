@@ -1,226 +1,162 @@
 # ReactiveDash Ingress Debugging Guide
 
-## Problem: "Ingress is failing to accept updates from all my pages"
+## 🔧 **FIXED: Core Ingress Issues**
 
-### Root Causes Fixed
+### **Issue 1: Incorrect Server Path Handling** ❌→✅
+**Problem**: Server was trying to handle `/api/hassio/app/` paths itself
+**Root Cause**: Home Assistant strips the ingress prefix automatically
+**Fix**: Simplified server to serve static files normally
 
-1. **API Proxy Incomplete** ✅
-   - Server was not properly handling request bodies for POST requests
-   - Missing proper error logging and response headers
-   - **Fix**: Enhanced `/api/ha/*` proxy with proper body handling and CORS headers
+### **Issue 2: Missing Ingress Configuration** ❌→✅
+**Problem**: `addon.yaml` had no ingress settings
+**Fix**: Added proper ingress configuration:
+```yaml
+ingress: true
+ingress_port: 3000
+ingress_entry: /
+```
 
-2. **Incorrect HA API Endpoints** ✅
-   - Client was calling `/api/ha/lights`, `/api/ha/climate` which don't exist
-   - Home Assistant's actual endpoints are `/api/states` and `/api/services`
-   - **Fix**: Updated `haService.js` to use correct HA API paths
-
-3. **Incomplete State Management** ✅
-   - Light toggle, brightness, climate, and security updates weren't being persisted
-   - **Fix**: Service calls now properly route to Home Assistant `/services/` endpoints
+### **Issue 3: Wrong HA Connection** ❌→✅
+**Problem**: Using `homeassistant.local` instead of `supervisor`
+**Fix**: Updated defaults for add-on context:
+- `HA_HOST: supervisor` (Docker network alias)
+- `HA_TOKEN` from `SUPERVISOR_TOKEN` environment
 
 ---
 
-## How the Fixed Flow Works
+## 🔍 **Current Status & Testing**
 
+### **Expected Behavior After Fixes:**
+1. **Add-on restart** → Docker rebuilds with ingress enabled
+2. **Click "Open"** → Loads dashboard through HA's secure ingress
+3. **API calls work** → `/api/ha/*` requests proxy to Home Assistant
+4. **Pages load** → All 5 pages (Home, Lights, Climate, Security, Settings)
+
+### **Debug Steps:**
+
+#### **1. Check Add-on Logs**
 ```
-React Page (LightsPage, ClimatePage, etc.)
-    ↓
-haService.callService() [e.g., light.turn_on]
-    ↓
-fetch(`/api/ha/services/light/turn_on`) [POST with entity_id, brightness]
-    ↓
-server.js /api/ha/* proxy
-    ↓
-HTTP POST to homeassistant.local:8123/api/services/light/turn_on
-    ↓
-Home Assistant updates entity state
-    ↓
-Client polls /api/ha/states → refreshes UI
+Home Assistant → Settings → Add-ons → ReactiveDash → Logs
 ```
+Look for:
+- `[INGRESS] Request: /` (successful static file serving)
+- `[HA PROXY] POST /services/light/turn_on` (API calls working)
+- `[HA RESPONSE] 200` (successful HA API responses)
+
+#### **2. Browser Network Tab**
+1. Open dashboard via ingress
+2. Press **F12** → **Network** tab
+3. Toggle a light
+4. Check for:
+   - `200` status for `/api/ha/services/light/turn_on`
+   - No CORS errors
+   - Proper JSON responses
+
+#### **3. Console Logs**
+Check browser console for:
+- `[HA API] POST /services/light/turn_on` (client-side logging)
+- No fetch errors or network failures
 
 ---
 
-## Testing the Ingress Integration
+## 🚨 **Common Issues & Solutions**
 
-### 1. **Check Server Logging**
+### **"Add-on won't start"**
+**Check**: Add-on logs show Docker build errors
+**Fix**: Ensure `addon.yaml` has correct `build:` section
 
-The server now logs all HA API calls:
+### **"Blank page or 404"**
+**Check**: Browser shows HA's default ingress page
+**Fix**: Restart add-on after ingress config changes
 
-```
-[HA PROXY] POST /services/light/turn_on -> http://homeassistant.local:8123/services/light/turn_on
-[HA RESPONSE] 200 for /services/light/turn_on
-[HA API] POST /services/light/turn_on {"entity_id":"light.living_room_main_lights"...}
-```
+### **"API calls fail (401/403)"**
+**Check**: `[HA ERROR]` in add-on logs
+**Fix**: Ensure `SUPERVISOR_TOKEN` is available (automatically provided by HA)
 
-Start server in development mode to see logs:
-```bash
-npm run dev  # From project root
-# or
-npm --prefix client run build && node server.js
-```
+### **"API calls fail (502)"**
+**Check**: Can't connect to `supervisor:8123`
+**Fix**: Verify Home Assistant is running and accessible
 
-### 2. **Browser Network Tab Debugging**
-
-1. Open Home Assistant → Settings → Add-ons → ReactiveDash → Open
-2. Press **F12** to open DevTools
-3. Go to **Network** tab
-4. Toggle a light in the UI
-5. Look for requests to `/api/hassio/app/api/ha/services/light/turn_on`
-   - **Status should be 200-201**, not 4xx/5xx
-   - **Response should be JSON array** of triggered states
-
-### 3. **Check Response Headers**
-
-The proxy now sets CORS headers for ingress compatibility:
-```
-Access-Control-Allow-Origin: *
-Access-Control-Allow-Methods: GET, POST, PUT, DELETE
-Access-Control-Allow-Headers: Content-Type
-Content-Type: application/json
-```
-
-### 4. **Console Errors to Watch For**
-
-- `"Service call failed: 401"` → HA_TOKEN is invalid
-- `"Service call error: Failed to fetch"` → Network/proxy issue
-- `"Home Assistant API unavailable"` → Server can't reach homeassistant:8123
+### **"CORS errors"**
+**Check**: Browser console shows CORS blocks
+**Fix**: Shouldn't happen with ingress - content served from same domain
 
 ---
 
-## File Changes Made
+## 📋 **Configuration Verification**
 
-### `server.js`
-**Enhanced `/api/ha/*` proxy with:**
-- Proper request body handling (collects data before forwarding)
-- Better error logging with endpoints shown
-- CORS headers for ingress compatibility
-- Response status code preservation
-- Content-type detection
+### **addon.yaml (Critical)**
+```yaml
+ingress: true          # ✅ Enables ingress
+ingress_port: 3000     # ✅ Internal port
+ingress_entry: /       # ✅ Root path
+auth_header: true      # ✅ Provides SUPERVISOR_TOKEN
+build:                 # ✅ Docker build config
+  dockerfile: Dockerfile
+  context: .
+  args:
+    BUILD_FROM: ghcr.io/home-assistant/{arch}-base:latest
+```
 
-### `client/src/services/haService.js`
-**Updated API methods:**
-- `getLights()` → fetches `/api/states` and filters for `light.*` and `switch.*` entities
-- `getClimateDevices()` → fetches `/api/states` and filters for `climate.*` entities
-- `callService()` → uses correct `/services/{domain}/{service}` endpoint
-- Added `turnOnSwitch()` and `turnOffSwitch()` for switch entities
-- Added logging for API calls with `[HA API]` prefix
-
----
-
-## Configuration Validation
-
-### Home Assistant Token
-The server uses `HA_TOKEN` from environment or a default fallback. In production (add-on), this should come from Home Assistant supervisor:
-
+### **server.js (Critical)**
 ```javascript
-const HA_TOKEN = process.env.HA_TOKEN || 'default-token';
+const HA_HOST = process.env.HA_HOST || 'supervisor';    // ✅ Docker network
+const HA_TOKEN = process.env.SUPERVISOR_TOKEN || '...'; // ✅ Auto-provided
+// NO ingress path handling - HA does this automatically
 ```
 
-**To verify token is correct:**
-```bash
-# Inside Home Assistant container
-echo $HA_TOKEN
-```
-
-### Home Assistant Host/Port
+### **Client (haService.js)**
 ```javascript
-const HA_HOST = process.env.HA_HOST || 'homeassistant.local';  // Correct for Docker network
-const HA_PORT = process.env.HA_PORT || 8123;
+const HA_API_BASE = '/api/ha';  // ✅ Relative URLs work with ingress
 ```
 
-For add-ons running inside HA Docker network, `homeassistant.local` resolves correctly.
+---
+
+## 🔄 **Testing Workflow**
+
+1. **Save changes** to `addon.yaml` and `server.js`
+2. **Rebuild client**: `npm run build` in client folder
+3. **Restart add-on** in Home Assistant
+4. **Wait** for Docker rebuild (check logs)
+5. **Click "Open"** to access via ingress
+6. **Test functionality**:
+   - Page navigation (sidebar/mobile tabs)
+   - Light toggles
+   - Climate controls
+   - Security settings
 
 ---
 
-## Troubleshooting Checklist
+## 🎯 **Success Indicators**
 
-### 🔴 Pages load but buttons don't update anything
-
-**Check:**
-1. Open DevTools → Network tab
-2. Toggle a light
-3. Look for POST request to `/api/hassio/app/api/ha/services/light/turn_on`
-   - If missing: React isn't calling the service
-   - If 502: Server can't reach HA
-   - If 401: Token is invalid
-   - If 200 but no update: Entity ID is wrong
-
-**Fix:**
-- Verify light entity IDs are correct in `App.jsx`
-- Check HA token is valid
-- Ensure HA is running at `homeassistant.local:8123`
-
-### 🔴 "Home Assistant API unavailable" error
-
-**Check:**
-1. From server terminal: `ping homeassistant.local` (in Docker)
-2. Verify `HA_HOST` and `HA_PORT` in `server.js`
-3. Check Home Assistant is running
-
-**Fix:**
-- In add-on container, use `homeassistant.local` (Docker DNS alias)
-- In local dev, might need `192.168.x.x:8123` or `localhost:8123`
-
-### 🔴 401 Unauthorized errors
-
-**Check:**
-1. Verify `HA_TOKEN` in `server.js` is correct
-2. Token should be a long JWT-like string (not entity IDs)
-
-**Fix:**
-```bash
-# Copy from Home Assistant Settings → Developer Tools → Rest Call
-# Should look like: eyJ...a.eyJ...b.WZj...
-```
-
-### 🔴 Ingress shows blank page or 404
-
-**Check:**
-1. App built: Files exist in `Z:\addons\local\reactivedash\client\dist\`
-2. Ingress path handling: Look for `[Request: /api/hassio/app/...]` in server logs
-
-**Fix:**
-- Rebuild: `npm run build` in client folder
-- Deploy: Files auto-deploy to add-on folder
-- Restart add-on in HA
+- ✅ **Dashboard loads** at `/api/hassio/app/`
+- ✅ **No CORS errors** in browser console
+- ✅ **API calls succeed** (200 status in Network tab)
+- ✅ **HA entities update** (check HA dashboard)
+- ✅ **All pages accessible** (Home, Lights, Climate, Security, Settings)
 
 ---
 
-## Performance Optimization
+## 🚑 **Emergency Troubleshooting**
 
-The polling approach (fetching state every 5 seconds) is functional but not ideal. For production, consider:
+If still not working:
 
-1. **WebSocket State Updates** - Home Assistant WebSocket API for real-time updates
-2. **Event Subscriptions** - Subscribe to `state_changed` events
-3. **Caching** - Reduce redundant `/api/states` calls
-
-Current bottleneck: Each page refresh fetches ALL entity states. This works for small setups but scales poorly.
-
----
-
-## Key API Endpoints Used
-
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/api/states` | GET | Fetch all entity states |
-| `/api/states/{entity_id}` | GET | Fetch single entity state |
-| `/api/services/{domain}/{service}` | POST | Call a service (turn light on, etc.) |
-| `/api/config` | GET | Get Home Assistant config |
-
-All proxied through `/api/ha/*` prefix on the dashboard server.
+1. **Check HA version**: Ensure supports ingress add-ons
+2. **Verify network**: `supervisor` hostname resolves in container
+3. **Test manually**: Access add-on directly at `http://homeassistant:3000`
+4. **Check permissions**: Add-on has network access to supervisor
+5. **Review logs**: Full add-on logs, not just recent entries
 
 ---
 
-## Next Steps
+## 📝 **Key Changes Made**
 
-1. **Restart the add-on** in Home Assistant Settings → Add-ons
-2. **Open dashboard** at `/api/hassio/app/`
-3. **Toggle a light** and watch DevTools Network tab
-4. **Check server logs** (add-on details in Settings → Add-ons)
-5. **Compare response** with expected 200 status and entity state JSON
+| File | Change | Reason |
+|------|--------|---------|
+| `server.js` | Removed ingress path handling | HA strips prefix automatically |
+| `server.js` | Updated HA_HOST to 'supervisor' | Correct for add-on Docker network |
+| `server.js` | Added SUPERVISOR_TOKEN support | HA provides token automatically |
+| `addon.yaml` | Added ingress configuration | Enables secure embedding |
+| `client/` | Rebuilt and redeployed | Updated configuration |
 
-If still failing, collect:
-- Server error logs
-- Browser console errors (F12)
-- Network request/response bodies
-- HA token validity
+**Result**: Proper Home Assistant ingress integration with secure API proxying.
