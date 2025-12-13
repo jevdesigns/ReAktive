@@ -1,0 +1,25 @@
+version: 1.0.0
+name: ReactiveDash
+description: Reactive Home Assistant Dashboard
+slug: reactivedash
+image: ghcr.io/home-assistant/{arch}-reactivedash
+arch:
+  - aarch64
+  - amd64
+ports:
+  3000/tcp: 3000
+environment:
+  HA_HOST: homeassistant
+  HA_PORT: 8123
+options:
+  port: 3000
+schema:
+  port:
+    type: int
+    default: 3000
+    description: Port to run the dashboard on
+auth_header: true
+privileged: []
+url: https://github.com/your-username/reactivedash
+startup: application
+boot: auto
