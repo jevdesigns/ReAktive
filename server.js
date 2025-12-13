@@ -37,25 +37,44 @@ const server = http.createServer((req, res) => {
     const haPath = req.url.replace('/api/ha', '');
     const haUrl = `http://${HA_HOST}:${HA_PORT}${haPath}`;
     
-    const haReq = http.request(haUrl, {
-      method: req.method,
-      headers: {
-        ...req.headers,
-        'Authorization': `Bearer ${HA_TOKEN}`,
-        'Content-Type': 'application/json'
+    console.log(`[HA PROXY] ${req.method} ${haPath} -> ${haUrl}`);
+    
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString();
+    });
+
+    req.on('end', () => {
+      const haReq = http.request(haUrl, {
+        method: req.method,
+        headers: {
+          'Authorization': `Bearer ${HA_TOKEN}`,
+          'Content-Type': 'application/json',
+          'Host': HA_HOST,
+          'Connection': 'close'
+        }
+      }, (haRes) => {
+        console.log(`[HA RESPONSE] ${haRes.statusCode} for ${haPath}`);
+        res.writeHead(haRes.statusCode, {
+          'Content-Type': haRes.headers['content-type'] || 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE',
+          'Access-Control-Allow-Headers': 'Content-Type'
+        });
+        haRes.pipe(res);
+      });
+
+      haReq.on('error', (err) => {
+        console.error('[HA ERROR]', err.message);
+        res.writeHead(502, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Home Assistant API unavailable', details: err.message }));
+      });
+
+      if (body) {
+        haReq.write(body);
       }
-    }, (haRes) => {
-      res.writeHead(haRes.statusCode, haRes.headers);
-      haRes.pipe(res);
+      haReq.end();
     });
-
-    haReq.on('error', (err) => {
-      console.error('HA API error:', err);
-      res.writeHead(502, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Home Assistant API unavailable' }));
-    });
-
-    req.pipe(haReq);
     return;
   }
 
