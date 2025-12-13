@@ -63,17 +63,25 @@ const server = http.createServer((req, res) => {
   let reqUrl = req.url;
   const basePath = INGRESS_PATH + '/';
 
-  // Handle ingress routing
+  // Log for debugging
+  console.log(`Request: ${req.url}`);
+
+  // Handle ingress routing - Home Assistant may pass different paths
   if (reqUrl.startsWith(basePath)) {
+    // Full ingress path
     reqUrl = reqUrl.substring(basePath.length);
     if (!reqUrl || reqUrl === '') {
       reqUrl = 'index.html';
     }
-  } else if (reqUrl === '/' || reqUrl === INGRESS_PATH) {
-    // Redirect to ingress path
-    res.writeHead(302, { 'Location': basePath });
-    res.end();
-    return;
+  } else if (reqUrl.startsWith('/api/hassio/app/')) {
+    // Alternative ingress format
+    reqUrl = reqUrl.substring('/api/hassio/app/'.length);
+    if (!reqUrl || reqUrl === '') {
+      reqUrl = 'index.html';
+    }
+  } else if (reqUrl === '/' || reqUrl === INGRESS_PATH || reqUrl === INGRESS_PATH + '/') {
+    // Root requests - serve index.html
+    reqUrl = 'index.html';
   } else if (req.url.startsWith('/api/')) {
     // API routes are already handled above
     res.writeHead(404, { 'Content-Type': 'text/plain' });
