@@ -24,23 +24,17 @@ const server = http.createServer((req, res) => {
 
   // Serve static files
   let reqUrl = req.url;
-  const basePath = '/api/hassio/app/';
-
-  if (reqUrl.startsWith(basePath)) {
-    reqUrl = reqUrl.substring(basePath.length);
-    if(reqUrl === '') {
-      reqUrl = 'index.html';
-    }
-  } else if (reqUrl === '/') {
-    // Redirect to the app
-    res.writeHead(302, { 'Location': basePath });
-    res.end();
-    return;
-  } else if (req.url.startsWith('/api/')) {
+  
+  if (req.url.startsWith('/api/')) {
     // API routes are already handled above. This is a fallback for any other /api routes.
     res.writeHead(404, { 'Content-Type': 'text/plain' });
     res.end('404 Not Found');
     return;
+  }
+
+  // Serve static files directly from root
+  if (reqUrl === '/') {
+    reqUrl = 'index.html';
   }
 
   let filePath = path.join(distDir, reqUrl);

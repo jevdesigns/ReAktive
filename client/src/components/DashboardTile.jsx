@@ -1,6 +1,8 @@
-import React from 'react'
+import React, { useState } from 'react'
 
-const DashboardTile = ({ name, icon, isActive, color, value, onClick }) => {
+const DashboardTile = ({ name, icon, isActive, color, value, onClick, onDragStart, onDragEnd }) => {
+  const [isDragging, setIsDragging] = useState(false)
+
   const colorClasses = {
     orange: 'from-orange-500/30 to-orange-600/20 border-orange-500/40',
     blue: 'from-blue-500/30 to-blue-600/20 border-blue-500/40',
@@ -8,16 +10,31 @@ const DashboardTile = ({ name, icon, isActive, color, value, onClick }) => {
     red: 'from-red-500/30 to-red-600/20 border-red-500/40'
   }
 
+  const handleDragStart = (e) => {
+    setIsDragging(true)
+    if (onDragStart) onDragStart(e)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleDragEnd = (e) => {
+    setIsDragging(false)
+    if (onDragEnd) onDragEnd(e)
+  }
+
   return (
     <div
+      draggable
       onClick={onClick}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
       className={`
-        glass-tile rounded-3xl p-6 cursor-pointer
+        glass-tile rounded-3xl p-6 cursor-grab active:cursor-grabbing
         ${isActive ? 'active' : ''}
         hover:shadow-2xl
         transition-all duration-300
         flex flex-col justify-between
         h-48
+        ${isDragging ? 'opacity-50 shadow-lg' : ''}
         ${isActive ? `bg-gradient-to-br ${colorClasses[color]}` : ''}
       `}
     >

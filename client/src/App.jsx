@@ -21,6 +21,7 @@ import haService from './services/haService';
  * - services/: API calls and external integrations
  */
 
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [time, setTime] = useState(new Date());
@@ -29,7 +30,7 @@ export default function App() {
   const [lights, setLights] = useState([
     { id: 'light.basement_sitting_area_main_lights_1', title: 'Basement Sitting Area Main Lights 1', on: false, brightness: 0 },
     { id: 'light.basement_sitting_area_main_lights_2', title: 'Basement Sitting Area Main Lights 2', on: false, brightness: 0 },
-    { id: 'light.den_den_lights', title: 'Den Den Lights', on: false, brightness: 0 },
+    { id: 'light.den_den_lights', title: ' Den Den Lights', on: false, brightness: 0 },
     { id: 'light.den_recessed_lights', title: 'Den Recessed Lights', on: false, brightness: 0 },
     { id: 'light.exterior_deck_lights_right', title: 'Exterior Deck Lights Right', on: false, brightness: 0 },
     { id: 'light.front_foyer_hallway_lights', title: 'Front Foyer Hallway Lights', on: false, brightness: 0 },
