@@ -18,6 +18,9 @@ schema:
     type: int
     default: 3000
     description: Port to run the dashboard on
+ingress: true
+ingress_port: 3000
+ingress_entry: /
 auth_header: true
 privileged: []
 url: https://github.com/your-username/reactivedash
