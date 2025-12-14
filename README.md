@@ -1,27 +1,71 @@
 # ReAktive
 
-A HomeKit-inspired Home Assistant add-on with a beautiful glassmorphism dashboard built with React and NGINX.
+<p align="center">
+  <img src="https://img.shields.io/badge/version-1.0.0-blue.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Home%20Assistant-Add--on-41BDF5.svg" alt="Home Assistant">
+  <img src="https://img.shields.io/badge/NGINX-Powered-009639.svg" alt="NGINX">
+  <img src="https://img.shields.io/badge/React-18-61DAFB.svg" alt="React">
+</p>
 
-## Features
+A modern, high-performance Home Assistant dashboard add-on built with React and powered by NGINX. Features real-time WebSocket updates, dynamic entity discovery, and a beautiful glassmorphism UI.
 
-- **Real-time WebSocket Updates**: Instant entity state changes
-- **Dynamic Entity Discovery**: Automatically discovers all Home Assistant entities
-- **Glassmorphism Design**: Modern HomeKit-inspired UI with blur effects
-- **NGINX Performance**: Fast, lightweight web server (~10MB memory usage)
-- **Direct Port Access**: No ingress complexity, accessible at port 3000
-- **Responsive Layout**: Works on desktop, tablet, and mobile devices
-- **Easy Customization**: Edit React components and auto-sync changes
+## ✨ Features
 
-## Installation
+### Performance
+- **🚀 NGINX Web Server**: Lightning-fast static file serving (~10MB memory)
+- **⚡ Fast Startup**: ~1 second boot time
+- **📊 Low Resource Usage**: Optimized for Raspberry Pi and similar hardware
+- **🔄 Real-time Updates**: WebSocket integration for instant entity state changes
 
-### In Home Assistant
+### User Experience
+- **🎨 Glassmorphism Design**: Modern HomeKit-inspired UI with blur effects
+- **📱 Responsive Layout**: Works seamlessly on desktop, tablet, and mobile
+- **🔍 Dynamic Discovery**: Automatically finds all Home Assistant entities
+- **🛡️ Error Boundaries**: Graceful failure handling for stability
 
-1. Go to **Settings → Add-ons → Add-on Store**
-2. Click the **three dots (⋮)** → **Check for updates**
-3. Scroll down to **Local add-ons**
-4. Find **ReAktive** and click **Install**
-5. Once installed, click **Start**
-6. Access the dashboard at **http://homeassistant.local:3000**
+### Integration
+- **🔌 Direct Port Access**: Simple port 3000 access (no ingress complexity)
+- **🏠 Home Assistant Native**: Supervisor token authentication
+- **🌐 Multi-Architecture**: Supports aarch64, amd64, armhf, armv7, i386
+
+## 📦 Installation
+
+### Method 1: Remote Deployment (Recommended)
+
+1. Clone this repository:
+   ```powershell
+   git clone https://github.com/jevdesigns/ReAktive.git
+   cd ReAktive
+   ```
+
+2. Deploy to your Home Assistant:
+   ```powershell
+   .\deploy_to_z.ps1 -Remote
+   ```
+
+3. In Home Assistant:
+   - Go to **Settings → Add-ons**
+   - Click **"Check for updates"**
+   - Find **"ReAktive"** in Local add-ons
+   - Click **Install** → **Start**
+
+4. Access at **http://homeassistant.local:3000**
+
+### Method 2: Manual Installation
+
+1. Copy files to your Home Assistant:
+   ```
+   /addons/local/reaktive/
+   ├── config.yaml
+   ├── Dockerfile
+   ├── nginx.conf
+   ├── run.sh
+   ├── README.md
+   ├── CHANGELOG.md
+   └── client/dist/
+   ```
+
+2. Follow steps 3-4 from Method 1
 
 ## Development
 
