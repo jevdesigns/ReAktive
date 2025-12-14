@@ -1,0 +1,21 @@
+version: "1.0.0"
+name: ReAktive
+description: Reactive Home Assistant Dashboard with NGINX
+slug: reaktive
+init: false
+arch:
+  - aarch64
+  - amd64
+  - armhf
+  - armv7
+  - i386
+ports:
+  3000/tcp: 3000
+ports_description:
+  3000/tcp: Web interface
+options: {}
+schema: {}
+image: "ghcr.io/jevdesigns/reaktive-{arch}"
+url: https://github.com/jevdesigns/ReAktive
+startup: application
+boot: auto
