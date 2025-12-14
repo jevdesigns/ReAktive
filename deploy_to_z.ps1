@@ -1,10 +1,10 @@
-# Deploy ReactiveDash Add-on to Z: Drive (Local Home Assistant)
+# Deploy ReAktive Add-on to Z: Drive (Local Home Assistant)
 param(
     [Parameter(Mandatory=$false)]
-    [string]$ZDrivePath = "Z:\addons\local\reactivedash"
+    [string]$ZDrivePath = "Z:\addons\local\reaktive"
 )
 
-Write-Host "🚀 Deploying ReactiveDash NGINX Add-on to Z: Drive" -ForegroundColor Green
+Write-Host "🚀 Deploying ReAktive NGINX Add-on to Z: Drive" -ForegroundColor Green
 Write-Host "=================================================" -ForegroundColor Yellow
 
 # Check if Z: drive exists
@@ -101,7 +101,7 @@ Write-Host "📍 Add-on deployed to: $addonDir" -ForegroundColor Cyan
 Write-Host "" -ForegroundColor Green
 Write-Host "🔧 Next Steps:" -ForegroundColor Yellow
 Write-Host "1. Open Home Assistant → Settings → Add-ons" -ForegroundColor White
-Write-Host "2. Find 'ReactiveDash' in local add-ons" -ForegroundColor White
+Write-Host "2. Find 'ReAktive' in local add-ons" -ForegroundColor White
 Write-Host "3. Click 'Install' (or 'Reinstall' if already installed)" -ForegroundColor White
 Write-Host "4. Wait for Docker build to complete" -ForegroundColor White
 Write-Host "5. Click 'Start' to run the add-on" -ForegroundColor White
