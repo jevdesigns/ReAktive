@@ -80,10 +80,12 @@ try {
 
 # Files to copy to add-on root
 $addonFiles = @(
-    "addon.yaml",
+    "config.yaml",
     "Dockerfile",
     "nginx.conf",
-    "run.sh"
+    "run.sh",
+    "README.md",
+    "CHANGELOG.md"
 )
 
 Write-Host "[COPYING] Add-on files..." -ForegroundColor Cyan
