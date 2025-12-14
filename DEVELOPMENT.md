@@ -1,33 +1,67 @@
-# ReactiveDash Development Guide
+# ReAktive Development Guide
 
-## Quick Start
+## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js installed
-- npm packages installed: `npm install` in both root and client directories
+- **Node.js** 18+ and npm
+- **Git** for version control
+- **PowerShell** (Windows) or **Bash** (Linux/Mac)
+- **Home Assistant** instance (for testing)
 
-### Development Mode
+### Initial Setup
 
-**On Windows (PowerShell):**
+1. **Clone the repository**:
+   ```powershell
+   git clone https://github.com/jevdesigns/ReAktive.git
+   cd ReAktive
+   ```
+
+2. **Install dependencies**:
+   ```powershell
+   cd client
+   npm install
+   ```
+
+3. **Build the client**:
+   ```powershell
+   npm run build
+   ```
+
+## 🛠️ Development Workflow
+
+### Local Development
+
+**Start development server**:
 ```powershell
-.\dev.ps1
+cd client
+npm run dev
 ```
 
-**On Linux/Mac:**
-```bash
-./dev.sh
+Access at `http://localhost:5173` with hot module replacement (HMR).
+
+### Building for Production
+
+**Build optimized bundle**:
+```powershell
+cd client
+npm run build
 ```
 
-This will:
-1. Build the React client
-2. Start the server with hot reload enabled
-3. Watch for changes in `client/src/` directory
+Output directory: `client/dist/`
 
-## How Hot Reload Works
+### Deployment
 
-When you edit and save any JSX file in `client/src/`, the server automatically:
-1. Detects the file change
-2. Sends a reload notification to the browser
+**Deploy to Home Assistant**:
+```powershell
+# Local (Z: drive mapped)
+.\deploy_to_z.ps1
+
+# Remote deployment
+.\deploy_to_z.ps1 -Remote
+
+# Custom host
+.\deploy_to_z.ps1 -HAHost 192.168.1.100
+```
 3. Refreshes the page automatically
 
 ## Access Methods
