@@ -1,13 +1,14 @@
-# ReactiveDash
+# ReAktive
 
-A HomeKit-inspired Home Assistant add-on with a beautiful glassmorphism dashboard built with React and Node.js.
+A HomeKit-inspired Home Assistant add-on with a beautiful glassmorphism dashboard built with React and NGINX.
 
 ## Features
 
-- **4 Interactive Tiles**: Lights, Climate, Security, and Media controls
+- **Real-time WebSocket Updates**: Instant entity state changes
+- **Dynamic Entity Discovery**: Automatically discovers all Home Assistant entities
 - **Glassmorphism Design**: Modern HomeKit-inspired UI with blur effects
-- **Ingress Support**: Integrated into Home Assistant sidebar (no separate ports needed)
-- **Real-time Updates**: Dynamic tile interactions with visual feedback
+- **NGINX Performance**: Fast, lightweight web server (~10MB memory usage)
+- **Direct Port Access**: No ingress complexity, accessible at port 3000
 - **Responsive Layout**: Works on desktop, tablet, and mobile devices
 - **Easy Customization**: Edit React components and auto-sync changes
 
@@ -18,10 +19,9 @@ A HomeKit-inspired Home Assistant add-on with a beautiful glassmorphism dashboar
 1. Go to **Settings → Add-ons → Add-on Store**
 2. Click the **three dots (⋮)** → **Check for updates**
 3. Scroll down to **Local add-ons**
-4. Find **ReactiveDash** and click **Install**
+4. Find **ReAktive** and click **Install**
 5. Once installed, click **Start**
-6. Enable **Show in sidebar** to add it to your sidebar
-7. Click the ReactiveDash link in your sidebar to access the dashboard
+6. Access the dashboard at **http://homeassistant.local:3000**
 
 ## Development
 

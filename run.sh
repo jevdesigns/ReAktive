@@ -1,7 +1,7 @@
 #!/usr/bin/env bashio
 # shellcheck shell=bash
 
-bashio::log.info "Starting ReactiveDash with NGINX..."
+bashio::log.info "Starting ReAktive with NGINX..."
 
 # Create NGINX runtime directories if they don't exist
 mkdir -p /var/run/nginx /var/log/nginx /var/cache/nginx

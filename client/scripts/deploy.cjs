@@ -3,11 +3,19 @@ const fs = require('fs');
 const path = require('path');
 
 const src = path.resolve(__dirname, '..', 'dist');
-// Deploy to multiple destinations so both /local and add-on ingress get updated
+// Deploy to Z: drive add-on directory if available
 const destinations = [
-  'Z:\\www\\reactivedash',
-  'Z:\\addons\\local\\reactivedash\\client\\dist'
-];
+  'Z:\\addons\\local\\reaktive\\client\\dist'
+].filter(dest => {
+  // Check if Z: drive is accessible
+  try {
+    fs.accessSync('Z:\\', fs.constants.F_OK);
+    return true;
+  } catch {
+    console.log('Z: drive not accessible, skipping deployment');
+    return false;
+  }
+});
 
 console.log(`Deploying from ${src} to destinations: ${destinations.join(', ')}`);
 
