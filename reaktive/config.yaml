@@ -15,7 +15,6 @@ ports_description:
   3000/tcp: Web interface
 options: {}
 schema: {}
-image: "ghcr.io/jevdesigns/reaktive-{arch}"
 url: https://github.com/jevdesigns/ReAktive
 startup: application
 boot: auto
