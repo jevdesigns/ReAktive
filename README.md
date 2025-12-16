@@ -42,3 +42,37 @@ For issues and feature requests, please use the [GitHub issue tracker](https://g
 [amd64-shield]: https://img.shields.io/badge/amd64-yes-green.svg
 [armhf-shield]: https://img.shields.io/badge/armhf-yes-green.svg
 [armv7-shield]: https://img.shields.io/badge/armv7-yes-green.svg
+
+## Deployment (local & remote)
+
+This repository includes a helper PowerShell script `deploy_to_z.ps1` that copies the add-on files into a Home Assistant add-ons folder ready for Supervisor to build.
+
+- Common usage (local mapped drive):
+```powershell
+.\deploy_to_z.ps1
+```
+
+- Build then deploy (runs `npm ci` + `npm run build` in the client folder before copying):
+```powershell
+.\deploy_to_z.ps1 -BuildClient
+```
+
+- Remote via SMB (maps `\\<host>\config` to `Y:`):
+```powershell
+.\deploy_to_z.ps1 -RemoteHost 192.168.1.100 -TargetPath 'Y:\addons\local\reaktive'
+```
+
+- Remote via SCP/SSH (recommended when you need to set `run.sh` executable):
+```powershell
+.\deploy_to_z.ps1 -RemoteHost 10.0.0.5 -UseSCP -SSHUser root -TargetPath '/config/addons/local/reaktive' -SetExec -SSHKey C:\keys\id_rsa
+```
+
+- Dry run (prints actions without making changes):
+```powershell
+.\deploy_to_z.ps1 -BuildClient -DryRun
+```
+
+Notes:
+- `-SetExec` only runs `chmod +x run.sh` over SSH; it is not possible to set Linux executable bits reliably over SMB.
+- Ensure `scp`/`ssh` are available in your PowerShell environment when using `-UseSCP`.
+

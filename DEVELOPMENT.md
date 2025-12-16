@@ -56,11 +56,17 @@ Output directory: `client/dist/`
 # Local (Z: drive mapped)
 .\deploy_to_z.ps1
 
-# Remote deployment
-.\deploy_to_z.ps1 -Remote
+# Build then deploy (builds client first)
+.\deploy_to_z.ps1 -BuildClient
 
-# Custom host
-.\deploy_to_z.ps1 -HAHost 192.168.1.100
+# Remote via SMB (map to Y:)
+.\deploy_to_z.ps1 -RemoteHost 192.168.1.100 -TargetPath 'Y:\addons\local\reaktive'
+
+# Remote via SCP+SSH (sets run.sh executable with -SetExec)
+.\deploy_to_z.ps1 -RemoteHost 10.0.0.5 -UseSCP -SSHUser root -TargetPath '/config/addons/local/reaktive' -SetExec -SSHKey C:\keys\id_rsa
+
+# Dry run (preview actions without making changes)
+.\deploy_to_z.ps1 -BuildClient -DryRun
 ```
 3. Refreshes the page automatically
 

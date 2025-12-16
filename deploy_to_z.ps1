@@ -20,6 +20,10 @@ param(
 
     [Parameter(Mandatory=$false)]
     [switch]$UseSCP = $false
+
+    ,
+    [Parameter(Mandatory=$false)]
+    [switch]$DryRun = $false
 )
 
 Write-Host "Deploying ReAktive add-on" -ForegroundColor Green
@@ -30,6 +34,10 @@ function Fail($msg) { Write-Error $msg; exit 1 }
 # Helper to run a command and bubble up non-zero exit codes
 function Run-Proc($exe, $args, $workingDir = $PSScriptRoot) {
     Write-Host "[RUN] $exe $args" -ForegroundColor Cyan
+    if ($DryRun) {
+        Write-Host "[DRYRUN] Would run: $exe $args" -ForegroundColor Yellow
+        return 0
+    }
     $p = Start-Process -FilePath $exe -ArgumentList $args -WorkingDirectory $workingDir -NoNewWindow -Wait -PassThru
     return $p.ExitCode
 }
@@ -70,12 +78,14 @@ if ($RemoteHost -and $UseSCP) {
     $addonFiles = @('config.yaml','Dockerfile','nginx.conf','run.sh','README.md','CHANGELOG.md')
     foreach ($f in $addonFiles) {
         $src = Join-Path $PSScriptRoot "reaktive\$f"
-        if (Test-Path $src) { Copy-Item $src -Destination $tmp -Force -Recurse } else { Write-Warning "Missing: $src" }
+        if (Test-Path $src) {
+            if ($DryRun) { Write-Host "[DRYRUN] Would copy $src -> $tmp" -ForegroundColor Yellow } else { Copy-Item $src -Destination $tmp -Force -Recurse }
+        } else { Write-Warning "Missing: $src" }
     }
 
     # Copy client dist into tmp/client/dist
     $tmpClientDist = Join-Path $tmp 'client\dist'
-    New-Item -ItemType Directory -Path $tmpClientDist -Force | Out-Null
+    if ($DryRun) { Write-Host "[DRYRUN] Would create directory: $tmpClientDist" -ForegroundColor Yellow } else { New-Item -ItemType Directory -Path $tmpClientDist -Force | Out-Null }
     $rcArgs = @($clientDistLocal, $tmpClientDist, '/MIR')
     $rc = Run-Proc 'robocopy' $rcArgs
     if ($rc -ge 8) { Fail "robocopy failed copying dist to temp (exit $rc)" }
@@ -84,7 +94,7 @@ if ($RemoteHost -and $UseSCP) {
     $scpArgs = @('-r')
     if ($SSHKey) { $scpArgs += @('-i', $SSHKey) }
     $scpArgs += @($tmp + '\*', "$SSHUser@$RemoteHost:`"$TargetPath`"")
-    $scpExit = Run-Proc 'scp' $scpArgs
+    if ($DryRun) { Write-Host "[DRYRUN] Would run: scp $($scpArgs -join ' ')" -ForegroundColor Yellow; $scpExit = 0 } else { $scpExit = Run-Proc 'scp' $scpArgs }
     if ($scpExit -ne 0) { Fail "scp failed (exit $scpExit)" }
 
     if ($SetExec) {
@@ -92,11 +102,10 @@ if ($RemoteHost -and $UseSCP) {
         $sshArgs = @()
         if ($SSHKey) { $sshArgs += @('-i', $SSHKey) }
         $sshArgs += @("$SSHUser@$RemoteHost", $sshCmd)
-        $sshExit = Run-Proc 'ssh' $sshArgs
-        if ($sshExit -ne 0) { Write-Warning "ssh chmod returned exit $sshExit" }
+        if ($DryRun) { Write-Host "[DRYRUN] Would run: ssh $($sshArgs -join ' ')" -ForegroundColor Yellow } else { $sshExit = Run-Proc 'ssh' $sshArgs; if ($sshExit -ne 0) { Write-Warning "ssh chmod returned exit $sshExit" } }
     }
 
-    Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+    if ($DryRun) { Write-Host "[DRYRUN] Would remove temp folder: $tmp" -ForegroundColor Yellow } else { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
     Write-Host "[OK] SCP deployment completed" -ForegroundColor Green
     exit 0
 }
@@ -111,7 +120,7 @@ if ($RemoteHost) {
     $drive = 'Y:'
     try {
         if (Get-PSDrive -Name Y -ErrorAction SilentlyContinue) { Remove-PSDrive -Name Y -Force -ErrorAction SilentlyContinue }
-        New-PSDrive -Name Y -PSProvider FileSystem -Root $remoteRoot -ErrorAction Stop | Out-Null
+        if ($DryRun) { Write-Host "[DRYRUN] Would map $remoteRoot to $drive" -ForegroundColor Yellow } else { New-PSDrive -Name Y -PSProvider FileSystem -Root $remoteRoot -ErrorAction Stop | Out-Null }
         Write-Host "[OK] Mapped $remoteRoot to $drive" -ForegroundColor Green
         $TargetPath = $TargetPath -replace '^Z:','Y:'
         $useTempDrive = $true
@@ -122,9 +131,9 @@ if ($RemoteHost) {
 
 # Ensure directories exist
 try {
-    if (-not (Test-Path $TargetPath)) { New-Item -ItemType Directory -Path $TargetPath -Force | Out-Null; Write-Host "  Created: $TargetPath" -ForegroundColor White } else { Write-Host "  Directory exists: $TargetPath" -ForegroundColor White }
+    if (-not (Test-Path $TargetPath)) { if ($DryRun) { Write-Host "[DRYRUN] Would create directory: $TargetPath" -ForegroundColor Yellow } else { New-Item -ItemType Directory -Path $TargetPath -Force | Out-Null }; Write-Host "  Created: $TargetPath" -ForegroundColor White } else { Write-Host "  Directory exists: $TargetPath" -ForegroundColor White }
     $clientDistTarget = Join-Path $TargetPath 'client\dist'
-    if (-not (Test-Path $clientDistTarget)) { New-Item -ItemType Directory -Path $clientDistTarget -Force | Out-Null; Write-Host "  Created: $clientDistTarget" -ForegroundColor White } else { Write-Host "  Directory exists: $clientDistTarget" -ForegroundColor White }
+    if (-not (Test-Path $clientDistTarget)) { if ($DryRun) { Write-Host "[DRYRUN] Would create directory: $clientDistTarget" -ForegroundColor Yellow } else { New-Item -ItemType Directory -Path $clientDistTarget -Force | Out-Null }; Write-Host "  Created: $clientDistTarget" -ForegroundColor White } else { Write-Host "  Directory exists: $clientDistTarget" -ForegroundColor White }
 } catch { Fail "Failed creating target directories: $_" }
 
 # Copy addon root files
@@ -134,15 +143,14 @@ foreach ($f in $addonFiles) {
     $src = Join-Path $PSScriptRoot "reaktive\$f"
     $dst = Join-Path $TargetPath $f
     if (Test-Path $src) {
-        try { Copy-Item -Path $src -Destination $dst -Force -Recurse; Write-Host "  [OK] $f" -ForegroundColor Green } catch { Write-Warning "  [WARN] Failed to copy $f : $_" }
+        try { if ($DryRun) { Write-Host "[DRYRUN] Would copy $src -> $dst" -ForegroundColor Yellow } else { Copy-Item -Path $src -Destination $dst -Force -Recurse }; Write-Host "  [OK] $f" -ForegroundColor Green } catch { Write-Warning "  [WARN] Failed to copy $f : $_" }
     } else { Write-Warning "  [WARN] Source not found: $src" }
 }
 
 # Copy client dist using robocopy for reliability
 Write-Host "[COPYING] Client files to $clientDistTarget" -ForegroundColor Cyan
 $rcArgs = @($clientDistLocal, $clientDistTarget, '/MIR')
-$rc = Run-Proc 'robocopy' $rcArgs
-if ($rc -ge 8) { Fail "robocopy failed copying dist (exit $rc)" }
+if ($DryRun) { Write-Host "[DRYRUN] Would run: robocopy $clientDistLocal $clientDistTarget /MIR" -ForegroundColor Yellow } else { $rc = Run-Proc 'robocopy' $rcArgs; if ($rc -ge 8) { Fail "robocopy failed copying dist (exit $rc)" } }
 
 if ($SetExec) {
     if ($RemoteHost -and -not $useTempDrive) { Write-Warning "-SetExec specified but no remote mapping available" }
