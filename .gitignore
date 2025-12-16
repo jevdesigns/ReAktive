@@ -1,5 +1,13 @@
 node_modules/
 .vscode/
 dist/
+# Allow committed build assets for the reaktive add-on (prebuilt client)
+!reaktive/client/dist/
+!reaktive/client/dist/**
+*.log
+.DS_Store
+node_modules/
+.vscode/
+dist/
 *.log
 .DS_Store
