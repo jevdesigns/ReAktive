@@ -1,31 +1,157 @@
-@tailwindcss base;
-@tailwindcss components;
-@tailwindcss utilities;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
 
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
   -webkit-font-smoothing: antialiased;
-  background: linear-gradient(135deg, #1c1c1e 0%, #2c2c2e 100%);
+  background: radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.18), transparent 32%),
+    radial-gradient(circle at 80% 0%, rgba(99, 102, 241, 0.18), transparent 26%),
+    #020202;
   min-height: 100vh;
+  color: #fff;
 }
 
-.glass-tile {
-  background: rgba(44, 44, 46, 0.6);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
-.glass-tile:hover {
-  background: rgba(60, 60, 62, 0.7);
-  transform: translateY(-2px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
 
-.glass-tile.active {
-  background: linear-gradient(135deg, rgba(255, 149, 0, 0.3), rgba(255, 149, 0, 0.15));
-  border: 1px solid rgba(255, 149, 0, 0.3);
-  box-shadow: 0 8px 32px rgba(255, 149, 0, 0.2);
+@keyframes fadeZoomIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes pulseSoft {
+  0%,
+  100% {
+    transform: scale(0.98);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.02);
+    opacity: 1;
+  }
+}
+
+@keyframes sunriseSpin {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  50% {
+    transform: rotate(180deg) scale(1.05);
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+
+@keyframes candlePulse {
+  0%,
+  100% {
+    transform: scale(0.98);
+    opacity: 0.8;
+  }
+  30% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+  60% {
+    transform: scale(1.01);
+    opacity: 0.9;
+  }
+}
+
+@keyframes cinemaZoom {
+  0% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+}
+
+@keyframes radarPulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.7;
+  }
+  70% {
+    transform: scale(1.1);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.2);
+    opacity: 0;
+  }
+}
+
+@keyframes wiggle {
+  0%,
+  100% {
+    transform: rotate(-1deg);
+  }
+  50% {
+    transform: rotate(1deg);
+  }
+}
+
+.animate-in {
+  animation-duration: 220ms;
+  animation-fill-mode: both;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  animation-name: fadeZoomIn;
+}
+
+.fade-in {
+  animation-name: fadeZoomIn;
+}
+
+.zoom-in-95 {
+  animation-name: fadeZoomIn;
+}
+
+.animate-pulse-soft {
+  animation: pulseSoft 3s ease-in-out infinite;
+}
+
+.sunrise-spin {
+  animation: sunriseSpin 12s linear infinite;
+}
+
+.candle-pulse {
+  animation: candlePulse 2.6s ease-in-out infinite;
+}
+
+.cinema-zoom {
+  animation: cinemaZoom 4s ease-in-out infinite;
+}
+
+.radar-pulse {
+  animation: radarPulse 3s ease-out infinite;
+}
+
+.animate-wiggle {
+  animation: wiggle 0.9s ease-in-out infinite;
 }
