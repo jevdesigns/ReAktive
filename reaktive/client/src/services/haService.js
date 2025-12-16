@@ -20,6 +20,9 @@ class HAWebSocket {
   constructor() {
     this.ws = null;
     this.listeners = new Map();
+    this.entities = new Map(); // entity_id -> state
+    this.entityAddedCallbacks = [];
+    this.entityRemovedCallbacks = [];
     this.connected = false;
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 5;
@@ -142,13 +145,47 @@ class HAWebSocket {
     if (data.type === 'event' && data.event.event_type === 'state_changed') {
       const { entity_id, new_state, old_state } = data.event.data;
       console.log(`[HA WS] State changed: ${entity_id}`, new_state);
-      
+
+      // Update entities registry
+      const exists = this.entities.has(entity_id);
+      if (new_state && !exists) {
+        this.entities.set(entity_id, new_state);
+        this.entityAddedCallbacks.forEach(cb => {
+          try { cb(entity_id, new_state); } catch (e) { console.error(e); }
+        });
+      } else if (!new_state && exists) {
+        this.entities.delete(entity_id);
+        this.entityRemovedCallbacks.forEach(cb => {
+          try { cb(entity_id); } catch (e) { console.error(e); }
+        });
+      } else if (new_state) {
+        this.entities.set(entity_id, new_state);
+      }
+
       // Notify all listeners for this entity
       this.notifyListeners(entity_id, new_state, old_state);
-      
+
       // Also notify general state change listeners
       this.notifyListeners('state_changed', { entity_id, new_state, old_state });
     }
+  }
+
+  // Entity discovery helpers
+  setEntities(initialStates) {
+    this.entities.clear();
+    initialStates.forEach(s => this.entities.set(s.entity_id, s));
+  }
+
+  onEntityAdded(cb) {
+    if (typeof cb === 'function') this.entityAddedCallbacks.push(cb);
+  }
+
+  onEntityRemoved(cb) {
+    if (typeof cb === 'function') this.entityRemovedCallbacks.push(cb);
+  }
+
+  getEntities() {
+    return Array.from(this.entities.values());
   }
 
   subscribe(entityId, callback) {
@@ -222,6 +259,9 @@ export const haService = {
   isWebSocketConnected: () => haWebSocket.isConnected(),
   subscribeToEntity: (entityId, callback) => haWebSocket.subscribe(entityId, callback),
   unsubscribeFromEntity: (entityId, callback) => haWebSocket.unsubscribe(entityId, callback),
+  onEntityAdded: (cb) => haWebSocket.onEntityAdded(cb),
+  onEntityRemoved: (cb) => haWebSocket.onEntityRemoved(cb),
+  getEntities: () => haWebSocket.getEntities(),
 
   // Get current state of an entity
   async getEntity(entityId) {
@@ -305,6 +345,10 @@ export const haService = {
         };
       }
       const allStates = await response.json();
+      // Update websocket entities registry if connected
+      try {
+        if (haWebSocket) haWebSocket.setEntities(allStates);
+      } catch (e) { /* ignore */ }
       
       // Categorize entities by domain
       return {
@@ -327,6 +371,12 @@ export const haService = {
         switches: []
       };
     }
+  },
+
+  // Discover entities (explicit call)
+  async discoverEntities() {
+    const all = await this.getAllEntities();
+    return all;
   },
 
   // Get all lights and switches
