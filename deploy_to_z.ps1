@@ -43,7 +43,9 @@ function Run-Proc($exe, $args, $workingDir = $PSScriptRoot) {
 }
 
 # Determine client source directory (prefer reaktive/client if present)
-$clientPaths = @(Join-Path $PSScriptRoot 'reaktive\client', Join-Path $PSScriptRoot 'client')
+$path1 = Join-Path $PSScriptRoot 'reaktive\client'
+$path2 = Join-Path $PSScriptRoot 'client'
+$clientPaths = @($path1, $path2)
 $clientDir = $clientPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $clientDir) { Write-Warning "No client directory found; skipping build" }
 
@@ -57,7 +59,11 @@ if ($BuildClient) {
 }
 
 # Ensure client dist exists
-$clientDistLocal = Join-Path ($clientDir ? $clientDir : Join-Path $PSScriptRoot 'reaktive\client') 'dist'
+if ($clientDir) {
+    $clientDistLocal = Join-Path $clientDir 'dist'
+} else {
+    $clientDistLocal = Join-Path (Join-Path $PSScriptRoot 'reaktive\client') 'dist'
+}
 if (-not (Test-Path $clientDistLocal)) {
     Write-Warning "Client dist not found at $clientDistLocal"
     if (-not $BuildClient) { Write-Host "Run with -BuildClient to build before deploying" -ForegroundColor Yellow }
@@ -67,7 +73,7 @@ if (-not (Test-Path $clientDistLocal)) {
 # Copy strategy: SCP (ssh) or SMB/drive (default)
 if ($RemoteHost -and $UseSCP) {
     # Use scp to copy files to remote host. TargetPath expected to be remote absolute path (e.g. /config/addons/local/reaktive)
-    Write-Host "[SCP] Copying files to $SSHUser@$RemoteHost:$TargetPath" -ForegroundColor Cyan
+    Write-Host ("[SCP] Copying files to {0}@{1}:{2}" -f $SSHUser, $RemoteHost, $TargetPath) -ForegroundColor Cyan
 
     # Build a temp archive folder to copy from
     $tmp = Join-Path $env:TEMP "reaktive_deploy_$(Get-Random)"
@@ -93,8 +99,9 @@ if ($RemoteHost -and $UseSCP) {
     # Use scp to copy recursive. If SSHKey provided use -i
     $scpArgs = @('-r')
     if ($SSHKey) { $scpArgs += @('-i', $SSHKey) }
-    $scpArgs += @($tmp + '\*', "$SSHUser@$RemoteHost:`"$TargetPath`"")
-    if ($DryRun) { Write-Host "[DRYRUN] Would run: scp $($scpArgs -join ' ')" -ForegroundColor Yellow; $scpExit = 0 } else { $scpExit = Run-Proc 'scp' $scpArgs }
+    $remoteDest = "$SSHUser@${RemoteHost}:`"${TargetPath}`""
+    $scpArgs += @($tmp + '\*', $remoteDest)
+    if ($DryRun) { Write-Host ("[DRYRUN] Would run: scp {0} {1}" -f ($scpArgs[0]), ($scpArgs[1])) -ForegroundColor Yellow; $scpExit = 0 } else { $scpExit = Run-Proc 'scp' $scpArgs }
     if ($scpExit -ne 0) { Fail "scp failed (exit $scpExit)" }
 
     if ($SetExec) {
