@@ -2,7 +2,7 @@ ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:latest
 FROM $BUILD_FROM
 
 # Install NGINX and build tools
-RUN apk add --no-cache nginx nodejs npm
+RUN apk add --no-cache nginx nodejs npm gettext
 
 # Create NGINX directories
 RUN mkdir -p /var/log/nginx /var/cache/nginx /tmp/nginx
