@@ -1,131 +1,154 @@
-# Deploy ReAktive Add-on to Home Assistant (Local or Remote)
+# Enhanced deploy script for ReAktive add-on
 param(
     [Parameter(Mandatory=$false)]
-    [string]$HAHost = "homeassistant.local",
-    
+    [string]$TargetPath = "Z:\addons\local\reaktive",
+
     [Parameter(Mandatory=$false)]
-    [string]$HAUsername = "admin",
-    
+    [string]$RemoteHost = "",
+
     [Parameter(Mandatory=$false)]
-    [string]$HAPassword = "a12b34c56d",
-    
+    [string]$SSHUser = "root",
+
     [Parameter(Mandatory=$false)]
-    [string]$ZDrivePath = "Z:\addons\local\reaktive",
-    
+    [string]$SSHKey = "",
+
     [Parameter(Mandatory=$false)]
-    [switch]$Remote = $false
+    [switch]$BuildClient = $false,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$SetExec = $false,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$UseSCP = $false
 )
 
-Write-Host "Deploying ReAktive NGINX Add-on" -ForegroundColor Green
+Write-Host "Deploying ReAktive add-on" -ForegroundColor Green
 Write-Host "=================================================" -ForegroundColor Yellow
 
-# Try Z: drive first (local mapped drive)
-if ((Test-Path "Z:\") -and !$Remote) {
-    Write-Host "[OK] Z: drive found - using local deployment" -ForegroundColor Green
-    $UseLocal = $true
-} else {
-    # Use remote deployment via network path
-    Write-Host "[REMOTE] Using remote deployment to \\$HAHost\config" -ForegroundColor Cyan
-    $UseLocal = $false
-    
-    # Try to connect with credentials if provided
-    if ($HAUsername -and $HAPassword) {
-        Write-Host "[AUTH] Authenticating to Home Assistant..." -ForegroundColor Cyan
-        try {
-            $SecurePassword = ConvertTo-SecureString $HAPassword -AsPlainText -Force
-            $Credential = New-Object System.Management.Automation.PSCredential($HAUsername, $SecurePassword)
-            
-            # Map network drive temporarily
-            $TempDrive = "Y:"
-            if (Test-Path $TempDrive) {
-                Remove-PSDrive -Name "Y" -Force -ErrorAction SilentlyContinue
-            }
-            
-            New-PSDrive -Name "Y" -PSProvider FileSystem -Root "\\$HAHost\config" -Credential $Credential -Persist -ErrorAction Stop | Out-Null
-            $ZDrivePath = "Y:\addons\local\reaktive"
-            Write-Host "[OK] Connected to Home Assistant at $TempDrive" -ForegroundColor Green
-        } catch {
-            Write-Error "[ERROR] Failed to connect to Home Assistant: $_"
-            Write-Host "[INFO] Make sure Samba add-on is installed and running in Home Assistant" -ForegroundColor Yellow
-            exit 1
-        }
-    }
+function Fail($msg) { Write-Error $msg; exit 1 }
+
+# Helper to run a command and bubble up non-zero exit codes
+function Run-Proc($exe, $args, $workingDir = $PSScriptRoot) {
+    Write-Host "[RUN] $exe $args" -ForegroundColor Cyan
+    $p = Start-Process -FilePath $exe -ArgumentList $args -WorkingDirectory $workingDir -NoNewWindow -Wait -PassThru
+    return $p.ExitCode
 }
 
-Write-Host "[OK] Target path configured" -ForegroundColor Green
+# Determine client source directory (prefer reaktive/client if present)
+$clientPaths = @(Join-Path $PSScriptRoot 'reaktive\client', Join-Path $PSScriptRoot 'client')
+$clientDir = $clientPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $clientDir) { Write-Warning "No client directory found; skipping build" }
 
-# Create the add-on directory structure
-$addonDir = $ZDrivePath
-$clientDistDir = Join-Path $addonDir "client\dist"
-
-Write-Host "[CREATING] Directory structure..." -ForegroundColor Cyan
-try {
-    if (!(Test-Path $addonDir)) {
-        New-Item -ItemType Directory -Path $addonDir -Force | Out-Null
-        Write-Host "  Created: $addonDir" -ForegroundColor White
-    } else {
-        Write-Host "  Directory exists: $addonDir" -ForegroundColor White
-    }
-
-    if (!(Test-Path $clientDistDir)) {
-        New-Item -ItemType Directory -Path $clientDistDir -Force | Out-Null
-        Write-Host "  Created: $clientDistDir" -ForegroundColor White
-    } else {
-        Write-Host "  Directory exists: $clientDistDir" -ForegroundColor White
-    }
-} catch {
-    Write-Error "[ERROR] Failed to create directories: $_"
-    exit 1
+if ($BuildClient) {
+    if (-not $clientDir) { Fail "Build requested but no client directory found" }
+    Write-Host "[BUILD] Running npm ci && npm run build in: $clientDir" -ForegroundColor Cyan
+    $code = Run-Proc 'npm' @('ci') $clientDir
+    if ($code -ne 0) { Fail "npm ci failed (exit $code)" }
+    $code = Run-Proc 'npm' @('run','build') $clientDir
+    if ($code -ne 0) { Fail "npm run build failed (exit $code)" }
 }
 
-# Files to copy to add-on root
-$addonFiles = @(
-    "config.yaml",
-    "Dockerfile",
-    "nginx.conf",
-    "run.sh",
-    "README.md",
-    "CHANGELOG.md"
-)
-
-Write-Host "[COPYING] Add-on files..." -ForegroundColor Cyan
-foreach ($file in $addonFiles) {
-    $sourcePath = Join-Path $PSScriptRoot $file
-    $destPath = Join-Path $addonDir $file
-
-    if (Test-Path $sourcePath) {
-        try {
-            Copy-Item -Path $sourcePath -Destination $destPath -Force
-            Write-Host "  [OK] $file" -ForegroundColor Green
-        } catch {
-            Write-Error "  [ERROR] Failed to copy $file : $_"
-        }
-    } else {
-        Write-Warning "  [WARN] Source file not found: $sourcePath"
-    }
+# Ensure client dist exists
+$clientDistLocal = Join-Path ($clientDir ? $clientDir : Join-Path $PSScriptRoot 'reaktive\client') 'dist'
+if (-not (Test-Path $clientDistLocal)) {
+    Write-Warning "Client dist not found at $clientDistLocal"
+    if (-not $BuildClient) { Write-Host "Run with -BuildClient to build before deploying" -ForegroundColor Yellow }
+    Fail "Client build artifacts missing"
 }
 
-# Copy client dist files
-Write-Host "[COPYING] Client files..." -ForegroundColor Cyan
-$clientSource = Join-Path $PSScriptRoot "client\dist"
-if (Test-Path $clientSource) {
+# Copy strategy: SCP (ssh) or SMB/drive (default)
+if ($RemoteHost -and $UseSCP) {
+    # Use scp to copy files to remote host. TargetPath expected to be remote absolute path (e.g. /config/addons/local/reaktive)
+    Write-Host "[SCP] Copying files to $SSHUser@$RemoteHost:$TargetPath" -ForegroundColor Cyan
+
+    # Build a temp archive folder to copy from
+    $tmp = Join-Path $env:TEMP "reaktive_deploy_$(Get-Random)"
+    Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+    New-Item -ItemType Directory -Path $tmp | Out-Null
+
+    # Copy addon root files
+    $addonFiles = @('config.yaml','Dockerfile','nginx.conf','run.sh','README.md','CHANGELOG.md')
+    foreach ($f in $addonFiles) {
+        $src = Join-Path $PSScriptRoot "reaktive\$f"
+        if (Test-Path $src) { Copy-Item $src -Destination $tmp -Force -Recurse } else { Write-Warning "Missing: $src" }
+    }
+
+    # Copy client dist into tmp/client/dist
+    $tmpClientDist = Join-Path $tmp 'client\dist'
+    New-Item -ItemType Directory -Path $tmpClientDist -Force | Out-Null
+    $rcArgs = @($clientDistLocal, $tmpClientDist, '/MIR')
+    $rc = Run-Proc 'robocopy' $rcArgs
+    if ($rc -ge 8) { Fail "robocopy failed copying dist to temp (exit $rc)" }
+
+    # Use scp to copy recursive. If SSHKey provided use -i
+    $scpArgs = @('-r')
+    if ($SSHKey) { $scpArgs += @('-i', $SSHKey) }
+    $scpArgs += @($tmp + '\*', "$SSHUser@$RemoteHost:`"$TargetPath`"")
+    $scpExit = Run-Proc 'scp' $scpArgs
+    if ($scpExit -ne 0) { Fail "scp failed (exit $scpExit)" }
+
+    if ($SetExec) {
+        $sshCmd = "chmod +x `"$TargetPath/run.sh`""
+        $sshArgs = @()
+        if ($SSHKey) { $sshArgs += @('-i', $SSHKey) }
+        $sshArgs += @("$SSHUser@$RemoteHost", $sshCmd)
+        $sshExit = Run-Proc 'ssh' $sshArgs
+        if ($sshExit -ne 0) { Write-Warning "ssh chmod returned exit $sshExit" }
+    }
+
+    Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Host "[OK] SCP deployment completed" -ForegroundColor Green
+    exit 0
+}
+
+# SMB / Drive-based deployment (local or network share)
+Write-Host "[COPY] Using SMB/drive-based deployment to $TargetPath" -ForegroundColor Cyan
+
+$useTempDrive = $false
+if ($RemoteHost) {
+    # Map \RemoteHost\config to a drive letter (Y:)
+    $remoteRoot = "\\$RemoteHost\config"
+    $drive = 'Y:'
     try {
-        # Use robocopy for reliable copying
-        $robocopyArgs = @($clientSource, $clientDistDir, "/MIR")
-        $robocopyResult = Start-Process -FilePath "robocopy" -ArgumentList $robocopyArgs -NoNewWindow -Wait -PassThru
-
-        if ($robocopyResult.ExitCode -lt 8) {
-            Write-Host "  [OK] Client files copied successfully" -ForegroundColor Green
-        } else {
-            Write-Error "  [ERROR] Robocopy failed with exit code $($robocopyResult.ExitCode)"
-        }
+        if (Get-PSDrive -Name Y -ErrorAction SilentlyContinue) { Remove-PSDrive -Name Y -Force -ErrorAction SilentlyContinue }
+        New-PSDrive -Name Y -PSProvider FileSystem -Root $remoteRoot -ErrorAction Stop | Out-Null
+        Write-Host "[OK] Mapped $remoteRoot to $drive" -ForegroundColor Green
+        $TargetPath = $TargetPath -replace '^Z:','Y:'
+        $useTempDrive = $true
     } catch {
-        Write-Error "  [ERROR] Failed to copy client files: $_"
+        Fail "Failed to map network share $remoteRoot : $_"
     }
-} else {
-    Write-Error "  [ERROR] Client dist directory not found: $clientSource"
-    Write-Host "  [INFO] Run 'npm run build' in the client directory first" -ForegroundColor Yellow
-    exit 1
+}
+
+# Ensure directories exist
+try {
+    if (-not (Test-Path $TargetPath)) { New-Item -ItemType Directory -Path $TargetPath -Force | Out-Null; Write-Host "  Created: $TargetPath" -ForegroundColor White } else { Write-Host "  Directory exists: $TargetPath" -ForegroundColor White }
+    $clientDistTarget = Join-Path $TargetPath 'client\dist'
+    if (-not (Test-Path $clientDistTarget)) { New-Item -ItemType Directory -Path $clientDistTarget -Force | Out-Null; Write-Host "  Created: $clientDistTarget" -ForegroundColor White } else { Write-Host "  Directory exists: $clientDistTarget" -ForegroundColor White }
+} catch { Fail "Failed creating target directories: $_" }
+
+# Copy addon root files
+$addonFiles = @('config.yaml','Dockerfile','nginx.conf','run.sh','README.md','CHANGELOG.md')
+Write-Host "[COPYING] Add-on files..." -ForegroundColor Cyan
+foreach ($f in $addonFiles) {
+    $src = Join-Path $PSScriptRoot "reaktive\$f"
+    $dst = Join-Path $TargetPath $f
+    if (Test-Path $src) {
+        try { Copy-Item -Path $src -Destination $dst -Force -Recurse; Write-Host "  [OK] $f" -ForegroundColor Green } catch { Write-Warning "  [WARN] Failed to copy $f : $_" }
+    } else { Write-Warning "  [WARN] Source not found: $src" }
+}
+
+# Copy client dist using robocopy for reliability
+Write-Host "[COPYING] Client files to $clientDistTarget" -ForegroundColor Cyan
+$rcArgs = @($clientDistLocal, $clientDistTarget, '/MIR')
+$rc = Run-Proc 'robocopy' $rcArgs
+if ($rc -ge 8) { Fail "robocopy failed copying dist (exit $rc)" }
+
+if ($SetExec) {
+    if ($RemoteHost -and -not $useTempDrive) { Write-Warning "-SetExec specified but no remote mapping available" }
+    if ($RemoteHost -and $useTempDrive) {
+        Write-Host "[INFO] Cannot set Linux executable bit over SMB. Consider using -UseSCP with -SetExec to run chmod via SSH." -ForegroundColor Yellow
+    }
 }
 
 Write-Host "" -ForegroundColor Green
@@ -133,27 +156,22 @@ Write-Host "==================================================" -ForegroundColor
 Write-Host "  Deployment Complete!" -ForegroundColor Green
 Write-Host "==================================================" -ForegroundColor Green
 Write-Host "" -ForegroundColor Green
-Write-Host "Add-on deployed to: $addonDir" -ForegroundColor Cyan
+Write-Host "Add-on deployed to: $TargetPath" -ForegroundColor Cyan
 Write-Host "" -ForegroundColor Green
 
-# Clean up temporary drive if used
-if (!$UseLocal -and (Test-Path "Y:")) {
+if ($useTempDrive) {
     Write-Host "[CLEANUP] Removing temporary network drive..." -ForegroundColor Cyan
-    Remove-PSDrive -Name "Y" -Force -ErrorAction SilentlyContinue
+    Remove-PSDrive -Name Y -Force -ErrorAction SilentlyContinue
 }
 
 Write-Host "Next Steps:" -ForegroundColor Yellow
 Write-Host "1. Open Home Assistant -> Settings -> Add-ons" -ForegroundColor White
-Write-Host "2. Click 'Check for updates' to refresh add-on list" -ForegroundColor White
-Write-Host "3. Find 'ReAktive' in local add-ons" -ForegroundColor White
-Write-Host "4. Click 'Install' (or 'Reinstall' if already installed)" -ForegroundColor White
-Write-Host "5. Wait for Docker build to complete (~1-2 minutes)" -ForegroundColor White
-Write-Host "6. Click 'Start' to run the add-on" -ForegroundColor White
-Write-Host "7. Access dashboard at: http://$HAHost`:3000" -ForegroundColor Cyan
-Write-Host "" -ForegroundColor Green
-Write-Host "Your NGINX-powered dashboard is ready!" -ForegroundColor Green
+Write-Host "2. Refresh add-on list and install/reinstall 'ReAktive'" -ForegroundColor White
+Write-Host "3. Wait for Supervisor to build the image and start the add-on" -ForegroundColor White
+Write-Host "4. Access dashboard at: http://<ha-host>:3000" -ForegroundColor Cyan
 Write-Host "" -ForegroundColor Green
 Write-Host "Usage Examples:" -ForegroundColor Yellow
-Write-Host "  Local (Z: drive):  .\deploy_to_z.ps1" -ForegroundColor White
-Write-Host "  Remote:            .\deploy_to_z.ps1 -Remote" -ForegroundColor White
-Write-Host "  Custom host:       .\deploy_to_z.ps1 -HAHost 192.168.1.100" -ForegroundColor White
+Write-Host "  Local (mapped Z:):   .\deploy_to_z.ps1" -ForegroundColor White
+Write-Host "  Build then deploy:    .\deploy_to_z.ps1 -BuildClient" -ForegroundColor White
+Write-Host "  Remote via SMB:      .\deploy_to_z.ps1 -RemoteHost 192.168.1.100 -TargetPath 'Y:\addons\local\reaktive'" -ForegroundColor White
+Write-Host "  Remote via SCP+SSH:  .\deploy_to_z.ps1 -RemoteHost 10.0.0.5 -UseSCP -SSHUser root -TargetPath '/config/addons/local/reaktive' -SetExec -SSHKey C:\keys\id_rsa" -ForegroundColor White
