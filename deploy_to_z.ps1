@@ -32,10 +32,10 @@ Write-Host "=================================================" -ForegroundColor 
 function Fail($msg) { Write-Error $msg; exit 1 }
 
 # Helper to run a command and bubble up non-zero exit codes
-function Run-Proc($exe, $args, $workingDir = $PSScriptRoot) {
-    if ($args -eq $null) { $args = @() }
+function Run-Proc($exe, $argList, $workingDir = $PSScriptRoot) {
+    if ($argList -eq $null) { $argList = @() }
     $argText = ''
-    if ($args -is [System.Array] -and $args.Count -gt 0) { $argText = $args -join ' ' } elseif ($args) { $argText = $args }
+    if ($argList -is [System.Array] -and $argList.Count -gt 0) { $argText = $argList -join ' ' } elseif ($argList) { $argText = $argList }
     Write-Host "[RUN] $exe $argText" -ForegroundColor Cyan
     if ($DryRun) {
         Write-Host "[DRYRUN] Would run: $exe $argText" -ForegroundColor Yellow
@@ -44,8 +44,8 @@ function Run-Proc($exe, $args, $workingDir = $PSScriptRoot) {
     # Use PowerShell call operator to execute commands reliably in the current process
     try {
         Push-Location -Path $workingDir
-        if ($args -is [System.Array] -and $args.Count -gt 0) {
-            & $exe @args
+        if ($argList -is [System.Array] -and $argList.Count -gt 0) {
+            & $exe @argList
         } elseif ($argText -ne '') {
             & $exe $argText
         } else {
