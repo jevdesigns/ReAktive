@@ -45,13 +45,14 @@ function Run-Proc($exe, $argList, $workingDir = $PSScriptRoot) {
     try {
         Push-Location -Path $workingDir
         if ($argList -is [System.Array] -and $argList.Count -gt 0) {
-            & $exe @argList
+            $procOut = & $exe @argList 2>&1
         } elseif ($argText -ne '') {
-            & $exe $argText
+            $procOut = & $exe $argText 2>&1
         } else {
-            & $exe
+            $procOut = & $exe 2>&1
         }
         $exit = $LASTEXITCODE
+        if ($procOut) { $procOut | ForEach-Object { Write-Host $_ } }
     } finally {
         Pop-Location
     }
