@@ -77,10 +77,18 @@ Output directory: `client/dist/`
 http://localhost:3000
 ```
 
-### Home Assistant Ingress
-```
-http://your-ha-ip:8123/api/hassio/app
-```
+### Home Assistant Ingress (Open inside Home Assistant)
+
+After you deploy the add-on to Home Assistant (`/config/addons/local/reaktive`) the Supervisor will build the add-on image.
+
+1. In Home Assistant go to **Settings → Add-ons** (or **Supervisor → Add-on Store** on older UIs).
+2. Find **ReAktive** in the local add-ons list and open it.
+3. Click **Install** (if required) and then **Start**.
+4. Use **Open Web UI** to launch the dashboard inside Home Assistant — this uses Supervisor Ingress.
+
+Notes:
+- If you prefer direct access (outside Ingress) the add-on still exposes port `3000` by default.
+- Ingress is enabled in the add-on manifest (`reaktive/config.yaml`) so the dashboard will appear as an embedded tab in HA when opened via the Add-on UI.
 
 ## Pages to Edit
 

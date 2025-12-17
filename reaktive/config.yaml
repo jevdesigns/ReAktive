@@ -18,3 +18,5 @@ schema: {}
 url: https://github.com/jevdesigns/ReAktive
 startup: application
 boot: auto
+ingress: true
+ingress_port: 3000
