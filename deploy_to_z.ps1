@@ -33,12 +33,19 @@ function Fail($msg) { Write-Error $msg; exit 1 }
 
 # Helper to run a command and bubble up non-zero exit codes
 function Run-Proc($exe, $args, $workingDir = $PSScriptRoot) {
-    Write-Host "[RUN] $exe $args" -ForegroundColor Cyan
+    if ($args -eq $null) { $args = @() }
+    $argText = ''
+    if ($args -is [System.Array] -and $args.Count -gt 0) { $argText = $args -join ' ' } elseif ($args) { $argText = $args }
+    Write-Host "[RUN] $exe $argText" -ForegroundColor Cyan
     if ($DryRun) {
-        Write-Host "[DRYRUN] Would run: $exe $args" -ForegroundColor Yellow
+        Write-Host "[DRYRUN] Would run: $exe $argText" -ForegroundColor Yellow
         return 0
     }
-    $p = Start-Process -FilePath $exe -ArgumentList $args -WorkingDirectory $workingDir -NoNewWindow -Wait -PassThru
+    if ($argText -ne '') {
+        $p = Start-Process -FilePath $exe -ArgumentList $args -WorkingDirectory $workingDir -NoNewWindow -Wait -PassThru
+    } else {
+        $p = Start-Process -FilePath $exe -WorkingDirectory $workingDir -NoNewWindow -Wait -PassThru
+    }
     return $p.ExitCode
 }
 
