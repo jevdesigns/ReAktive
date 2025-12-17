@@ -41,12 +41,21 @@ function Run-Proc($exe, $args, $workingDir = $PSScriptRoot) {
         Write-Host "[DRYRUN] Would run: $exe $argText" -ForegroundColor Yellow
         return 0
     }
-    if ($argText -ne '') {
-        $p = Start-Process -FilePath $exe -ArgumentList $args -WorkingDirectory $workingDir -NoNewWindow -Wait -PassThru
-    } else {
-        $p = Start-Process -FilePath $exe -WorkingDirectory $workingDir -NoNewWindow -Wait -PassThru
+    # Use PowerShell call operator to execute commands reliably in the current process
+    try {
+        Push-Location -Path $workingDir
+        if ($args -is [System.Array] -and $args.Count -gt 0) {
+            & $exe @args
+        } elseif ($argText -ne '') {
+            & $exe $argText
+        } else {
+            & $exe
+        }
+        $exit = $LASTEXITCODE
+    } finally {
+        Pop-Location
     }
-    return $p.ExitCode
+    return $exit
 }
 
 # Determine client source directory (prefer reaktive/client if present)
